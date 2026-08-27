@@ -1,0 +1,31 @@
+---
+# Example command set for x_remote.py.
+#
+# Replace the IPs, device_type, and commands below with your own pod's
+# values. Addresses here are documentation-only placeholders (RFC 5737
+# TEST-NET ranges) — they are not real devices.
+#
+# Validate this file before running it for real (connects to nothing):
+#   python3 x_remote.py --check verification_commands.yaml
+
+output_file: verification_output.log
+
+devices:
+  - device_info:
+      device_type: cisco_ios
+      ip: 192.0.2.1
+      username: admin
+      password: "{ENV:LAB_PASS}"
+    commands:
+      - show ip interface brief | exclude unassigned
+      - show ip route
+      - show cdp neighbors detail
+
+  - device_info:
+      device_type: cisco_ios
+      ip: 192.0.2.2
+      username: admin
+      password: "{ENV:LAB_PASS}"
+    commands:
+      - show ip ospf neighbor
+      - show running-config

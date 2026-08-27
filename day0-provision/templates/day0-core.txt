@@ -1,0 +1,40 @@
+! Day-0 baseline — CORE — rendered for {USERNAME} (U={U})
+! Matches the L01 addressing plan. Adjust interface names to your gear.
+enable
+configure terminal
+hostname {USERNAME}-CORE
+no ip domain-lookup
+ip domain-name cst8371.lab
+username admin secret {ENV:DAY0_ADMIN_PASS}
+!
+interface GigabitEthernet0/0/0
+ description PC LAN
+ ip address 10.{U}.1.2 255.255.255.240
+ no shutdown
+!
+interface GigabitEthernet0/0/2
+ description VM LAN
+ ip address 10.{U}.2.2 255.255.255.192
+ no shutdown
+!
+interface GigabitEthernet0/0/1
+ description to EDGE
+ ip address 198.18.{U}.2 255.255.255.248
+ no shutdown
+!
+interface Loopback{U}
+ ip address 10.{U}.3.2 255.255.255.0
+!
+ip route 0.0.0.0 0.0.0.0 198.18.{U}.1
+!
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh authentication-retries 3
+ip ssh time-out 60
+!
+line vty 0 4
+ login local
+ transport input ssh
+ exec-timeout 10 0
+!
+end

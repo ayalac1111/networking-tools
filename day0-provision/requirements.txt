@@ -1,0 +1,2 @@
+pyyaml
+pyserial       # only needed for a live push (--port); dry runs work without it

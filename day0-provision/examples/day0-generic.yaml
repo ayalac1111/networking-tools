@@ -1,0 +1,32 @@
+# day0_provision.py configuration
+#
+# The template + this file decide which {VARIABLES} a device needs. Supply
+# them on the command line (--u, --username); anything the template still
+# needs but you didn't supply stops the run before anything is sent.
+#
+# Secrets: the templates use {ENV:DAY0_ADMIN_PASS} — export it before a live
+# push so no password ever sits in a file:
+#   export DAY0_ADMIN_PASS='...'
+#
+#   python3 day0_provision.py --config examples/day0-generic.yaml --u 14 --username ayal0014 --dry-run
+#   python3 day0_provision.py --config examples/day0-generic.yaml --u 14 --username ayal0014 --port /dev/ttyUSB0
+
+serial:
+  baud: 9600
+  timeout: 3
+
+devices:
+  CORE:
+    template: templates/day0-core.txt
+    verify:
+      - command: "show ip ssh"
+        expect: "SSH Enabled - version 2"
+      - command: "show ip interface brief | include 10.{U}.1.2"
+        expect: "10.{U}.1.2"
+  EDGE:
+    template: templates/day0-edge.txt
+    verify:
+      - command: "show ip ssh"
+        expect: "SSH Enabled - version 2"
+      - command: "show ip interface brief | include 203.0.113.{U}"
+        expect: "203.0.113.{U}"

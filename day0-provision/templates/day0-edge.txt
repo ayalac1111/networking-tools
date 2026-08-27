@@ -1,0 +1,33 @@
+! Day-0 baseline — EDGE — rendered for {USERNAME} (U={U})
+! Matches the L01 addressing plan. Adjust interface names to your gear.
+enable
+configure terminal
+hostname {USERNAME}-EDGE
+no ip domain-lookup
+ip domain-name cst8371.lab
+username admin secret {ENV:DAY0_ADMIN_PASS}
+!
+interface GigabitEthernet0/0/1
+ description to CORE
+ ip address 198.18.{U}.1 255.255.255.248
+ no shutdown
+!
+interface GigabitEthernet0/0/0
+ description to REMOTE (professor network)
+ ip address 203.0.113.{U} 255.255.255.0
+ no shutdown
+!
+ip route 0.0.0.0 0.0.0.0 203.0.113.254
+ip route 10.{U}.0.0 255.255.0.0 198.18.{U}.2
+!
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh authentication-retries 3
+ip ssh time-out 60
+!
+line vty 0 4
+ login local
+ transport input ssh
+ exec-timeout 10 0
+!
+end
