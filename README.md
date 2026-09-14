@@ -1,6 +1,6 @@
 # networking-tools
 
-Python tools for networking students to run against their own pod's network devices. Each tool is self-contained in its own folder — download or clone this repo, `cd` into the tool you need, install its requirements, and run it.
+Tools for networking students to use with their own pod's network devices and coursework. Each tool is self-contained in its own folder — download or clone this repo, `cd` into the tool you need, and run it.
 
 ## Tools
 
@@ -30,6 +30,16 @@ cd day0-provision
 pip install -r requirements.txt
 python3 day0_provision.py --config examples/day0-generic.yaml \
     --u 14 --username ayal0014 --dry-run
+```
+
+### [feedback-viewer](feedback-viewer/)
+
+Renders a [GradeIt](https://github.com/ayalac1111/GradeIt) feedback YAML file — the file your instructor sends back after grading a lab — as a readable, colour-coded report instead of raw YAML.
+
+**How it works**: `feedback-view.html` is a self-contained page — no install, no server. Open it in a browser and drag in your `studID-Lab-feedback.yaml` file(s); everything runs client-side and the file never leaves your computer.
+
+```bash
+open feedback-viewer/feedback-view.html
 ```
 
 ## Getting the code
