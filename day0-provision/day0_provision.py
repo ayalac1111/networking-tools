@@ -37,7 +37,9 @@ Behaviour
   4. Safety scan: refuse templates containing erase/reload/format/delete.
   5. --dry-run (or simply omitting --port) prints the rendered config and
      stops.
-  6. Otherwise: confirm, open serial, wake the console (declining the
+  6. --verify-only (with --port) opens the console, runs only the verify
+     checks, and sends no configuration.
+  7. Otherwise: confirm, open serial, wake the console (declining the
      initial configuration dialog if it appears), send the config line by
      line, then run the verify commands and regex-check each one.
 
@@ -57,6 +59,12 @@ have — e.g. a previous sitting's OSPF/NAT/ACL, which would let a student pass
 a checkpoint they did not build. The console echoes each command back before
 its output, so the echo is stripped before matching; without that a negative
 check on a pattern that appears in its own command could never pass.
+
+A check passes only when its command completed: a device prompt must return
+(within the check's `timeout`, default 20 s) and IOS must not report a syntax
+error. Timeouts and CLI errors fail both `expect` and `expect_absent`. An
+empty body is legitimate when the prompt confirms completion, so a router with
+no OSPF process can pass `expect_absent: Routing Process`.
 
 Output follows the course evidence format: Action → Evidence → Success
 Indicator → Failure Signal.
@@ -256,6 +264,10 @@ class Console:
         self.ser.write((line + "\r").encode())
         return self.read_available(settle)
 
+    def send_raw(self, data: bytes) -> None:
+        """Write bytes with no line ending (for the pager's Space key)."""
+        self.ser.write(data)
+
     def wake(self) -> str:
         """Wake the console; decline the initial configuration dialog."""
         out = self.send_line("", 1.0)
@@ -275,7 +287,7 @@ class Console:
 
 
 def push_config(console: Console, config_text: str, echo: bool) -> List[str]:
-    """Send config line by line; collect any '%' error lines the device echoes."""
+    """Send config lines; flag percent-prefixed replies except known RSA progress."""
     errors: List[str] = []
     for raw in config_text.splitlines():
         line = raw.rstrip()
@@ -291,6 +303,18 @@ def push_config(console: Console, config_text: str, echo: bool) -> List[str]:
             # key generation can take a few seconds on older gear
             out += console.read_available(settle=4.0)
         for reply in out.splitlines():
+            # IOS prefixes these normal RSA-generation notices with "%" too.
+            # Match only known informational lines on the RSA command; keep
+            # unknown percent-prefixed output visible as a potential failure.
+            rsa_progress = "generate rsa" in line.lower() and re.fullmatch(
+                r"%\s*(?:The key modulus size is \d+ bits\.?|"
+                r"Generating \d+ bit RSA keys, keys will be non-exportable\.{0,3})",
+                reply.strip(), re.IGNORECASE,
+            )
+            if rsa_progress:
+                if echo:
+                    print(f"    {reply.strip()}")
+                continue
             if reply.strip().startswith("%"):
                 errors.append(f"{line}  ->  {reply.strip()}")
                 print(f"    ! {reply.strip()}")
@@ -336,11 +360,114 @@ def strip_echo(output: str, command: str) -> str:
                      if needle not in line)
 
 
-def verify(console: Console, checks: List[Dict[str, str]],
+# Device prompt on its own line: "host#", "host>", "host(config)#".
+PROMPT_RE = re.compile(r"^[^\s>#]+(?:\([^)\s]*\))?[>#]$")
+MORE_RE = re.compile(r"--More--\s*$")
+# IOS syntax/permission errors. Informational "% ..." lines such as
+# "% Network not in table" are real command results, not errors.
+CLI_ERROR_RE = re.compile(
+    r"^\s*%\s*(Invalid input|Ambiguous command|Incomplete command|"
+    r"Unrecognized command|Unknown command|Authorization failed|"
+    r"Access denied)", re.IGNORECASE | re.MULTILINE)
+
+DEFAULT_COMMAND_TIMEOUT = 20.0
+MAX_PAGES = 200
+
+
+def clean_terminal(text: str) -> str:
+    """Apply backspaces and drop carriage returns, as a terminal would.
+
+    IOS erases the pager's --More-- prompt with backspace/space/backspace
+    sequences; without this the stale marker stays in the captured text.
+    """
+    out: List[str] = []
+    for ch in text:
+        if ch == "\x08":
+            if out and out[-1] != "\n":
+                out.pop()
+        elif ch != "\r":
+            out.append(ch)
+    return "".join(out)
+
+
+class CommandResult:
+    """Outcome of one console command.
+
+    status is 'ok' (a device prompt confirmed completion and no CLI error was
+    reported), 'timeout' (no prompt before the deadline) or 'error' (IOS
+    rejected the command). body has the echo and the final prompt removed and
+    may legitimately be empty.
+    """
+
+    def __init__(self, status: str, body: str, detail: str = ""):
+        self.status = status
+        self.body = body
+        self.detail = detail
+
+    @property
+    def ok(self) -> bool:
+        return self.status == "ok"
+
+
+def echo_seen(lines: List[str], command: str) -> bool:
+    """True if any line shows the command echo (or, when the console scrolled
+    a long command horizontally, its tail). Stops stale prompts left in the
+    buffer from standing in for a response."""
+    needle = command.strip()
+    tail = needle[-15:]
+    return any(needle in ln or tail in ln for ln in lines)
+
+
+def run_command(console: Any, command: str, settle: float = 1.2,
+                timeout: float = DEFAULT_COMMAND_TIMEOUT,
+                max_pages: int = MAX_PAGES) -> CommandResult:
+    """Send one command and collect its output until a device prompt returns.
+
+    Completion means the cleaned output ends on a prompt line and an earlier
+    line shows the command echo, so a stale prompt alone never counts. A --More-- marker is answered
+    with Space only while it is the *end* of the output and only after new
+    data has arrived since the previous Space, so a stale marker in the middle
+    of the text can never trigger more writes. The whole exchange is bounded
+    by `timeout` seconds and `max_pages` pager prompts.
+    """
+    deadline = time.monotonic() + timeout
+    raw = console.send_line(command, settle=settle)
+    pages = 0
+    space_sent_at = -1          # len(raw) when the last Space was written
+    while True:
+        text = clean_terminal(raw)
+        lines = text.split("\n")
+        last = lines[-1].strip()
+        if (len(lines) >= 2 and PROMPT_RE.match(last)
+                and echo_seen(lines[:-1], command)):
+            body = strip_echo("\n".join(lines[:-1]), command)
+            if CLI_ERROR_RE.search(body):
+                err = next(ln.strip() for ln in body.splitlines()
+                           if CLI_ERROR_RE.search(ln))
+                return CommandResult("error", body, err)
+            return CommandResult("ok", body)
+        if MORE_RE.search(text) and len(raw) > space_sent_at:
+            if pages >= max_pages:
+                return CommandResult("timeout", strip_echo(text, command),
+                                     f"more than {max_pages} pager prompts")
+            console.send_raw(b" ")
+            pages += 1
+            space_sent_at = len(raw)
+        if time.monotonic() >= deadline:
+            return CommandResult(
+                "timeout", strip_echo(text, command),
+                f"no device prompt within {timeout:.0f}s")
+        raw += console.read_available(0.6)
+
+
+def verify(console: Any, checks: List[Dict[str, str]],
            mapping: Dict[str, str]) -> bool:
     all_ok = True
     print("\nVerification")
     print("-" * 56)
+    # Session-only; keeps long output (stale OSPF, logs) from paging at all.
+    # The pager is still handled in run_command if this is refused.
+    run_command(console, "terminal length 0", settle=0.5, timeout=10.0)
     for chk in checks:
         key = check_assertion(chk)
         negate = key == "expect_absent"
@@ -354,16 +481,18 @@ def verify(console: Console, checks: List[Dict[str, str]],
         # did — this makes "not converged yet" retry instead of fail.
         retries = int(chk.get("retries", 0))
         retry_interval = float(chk.get("retry_interval", 5.0))
+        timeout = float(chk.get("timeout", DEFAULT_COMMAND_TIMEOUT))
         attempt = 0
         while True:
-            output = console.send_line(command, settle=1.2)
-            # drain paged output
-            while "--More--" in output:
-                console.ser.write(b" ")
-                output += console.read_available(0.6)
-            body = strip_echo(output, command)
-            found = re.search(pattern, body) is not None
-            ok = (not found) if negate else found
+            result = run_command(console, command, settle=1.2, timeout=timeout)
+            body = result.body
+            # A timeout or CLI error is never evidence for either assertion:
+            # only a completed command can prove a pattern present or absent.
+            if result.ok:
+                found = re.search(pattern, body) is not None
+                ok = (not found) if negate else found
+            else:
+                ok = False
             if ok or attempt >= retries:
                 break
             attempt += 1
@@ -375,7 +504,14 @@ def verify(console: Console, checks: List[Dict[str, str]],
         suffix = f" (after {attempt} retr{'y' if attempt == 1 else 'ies'})" if attempt else ""
         print(f"[{mark}] {command}{suffix}")
         print(f"     expected: {'MUST NOT match ' if negate else ''}{pattern}")
-        if not ok and negate:
+        if not result.ok:
+            print(f"     command did not complete cleanly ({result.status}): "
+                  f"{result.detail}")
+            tail = "\n".join(body.strip().splitlines()[-5:])
+            if tail:
+                print("     got (last lines):\n       "
+                      + tail.replace("\n", "\n       "))
+        elif not ok and negate:
             hits = [ln.strip() for ln in body.splitlines()
                     if re.search(pattern, ln)][:5]
             print("     found (must not be present):\n       "
@@ -400,6 +536,8 @@ def main() -> int:
     ap.add_argument("--u", help="your U number, if the template uses {U}")
     ap.add_argument("--username",
                     help="your username, if the template uses {USERNAME}")
+    ap.add_argument("--core-member", type=int, choices=range(1, 10),
+                    help="CORE switch member (1-9); overrides variables.CORE_MEMBER")
     ap.add_argument("--device",
                     help="device role (e.g. CORE); omit to select "
                          "interactively when the config has several devices")
@@ -410,6 +548,10 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true",
                     help="print the rendered config and send nothing "
                          "(also the default when --port is omitted)")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="read-only recheck: open the console and run the "
+                         "verify checks without sending any configuration "
+                         "(needs --port)")
     ap.add_argument("--yes", action="store_true",
                     help="skip the confirmation prompt")
     ap.add_argument("--quiet", action="store_true",
@@ -433,6 +575,8 @@ def main() -> int:
         variables[str(key).lower()] = str(value).strip()
     if args.u is not None:
         variables["u"] = str(args.u).strip()
+    if args.core_member is not None:
+        variables["core_member"] = str(args.core_member)
     if args.username is not None:
         variables["username"] = args.username.strip().lower()
 
@@ -445,6 +589,31 @@ def main() -> int:
 
     label = identity_label(variables)
     who = f" for {label}" if label else ""
+
+    if args.verify_only:
+        if args.dry_run or not args.port:
+            sys.exit("--verify-only needs --port and cannot be combined "
+                     "with --dry-run.")
+        if not checks:
+            sys.exit(f"device '{device}' defines no verify checks.")
+        serial_cfg = cfg.get("serial") or {}
+        console = Console(args.port, args.baud or int(serial_cfg.get("baud", 9600)),
+                          float(serial_cfg.get("timeout", 3)))
+        try:
+            print(f"Read-only verification of {device}{who} on {args.port} "
+                  "(no configuration is sent) ...")
+            console.wake()
+            mapping = dict(variables)
+            mapping["device"] = device
+            ok = verify(console, checks, mapping)
+        finally:
+            console.close()
+        if ok:
+            print(f"✔ {device}{who} passed every check (nothing was changed).")
+            return 0
+        print("✘ One or more checks failed — review the output above. "
+              "Do not re-push Day0.")
+        return 1
 
     if args.dry_run or not args.port:
         print(f"! Rendered day-0 config — {device}{who} (dry-run)\n")
