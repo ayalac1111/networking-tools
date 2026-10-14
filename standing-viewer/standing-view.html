@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CST8371 — Your Standing</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <style>
+    :root { color-scheme: light; font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:#111827; background:#fff; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#fff; line-height:1.45; }
+    main { max-width:1100px; margin:0 auto; padding:32px 24px 48px; }
+    header { display:flex; justify-content:space-between; gap:24px; align-items:flex-start; border-bottom:1px solid #e5e7eb; padding-bottom:20px; }
+    h1 { margin:0; color:#65846f; font-size:clamp(26px,4vw,38px); line-height:1.15; letter-spacing:-.04em; }
+    h2 { font-size:22px; margin:30px 0 13px; }
+    p { margin:0; }
+    .muted { color:#6b7280; }
+    .student-header { text-align:right; }
+    #student-name { color:#111827; font-size:20px; font-weight:750; }
+    .student-header .file-status { display:inline-flex; margin-top:9px; }
+    .file-status { display:flex; gap:8px; align-items:center; padding:8px 10px; border:1px solid #d1d5db; border-radius:8px; background:#f9fafb; color:#4b5563; font-size:13px; white-space:nowrap; }
+    .dot { width:9px; height:9px; border-radius:50%; background:#65846f; }
+    .notice { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-top:20px; padding:13px 15px; border-left:5px solid #65846f; border-radius:8px; background:#f6faf7; color:#284431; }
+    button, .file-button { appearance:none; border:1px solid #65846f; border-radius:8px; background:#65846f; color:#fff; padding:9px 12px; font:inherit; font-weight:650; cursor:pointer; }
+    button:hover, .file-button:hover { background:#4e6c57; }
+    .file-button { display:inline-block; }
+    input[type=file] { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+    .load-panel { max-width:650px; margin:11vh auto 0; text-align:center; }
+    .load-panel h1 { color:#65846f; }
+    .drop-zone { margin:28px 0 14px; padding:48px 24px; border:2px dashed #9fb5a5; border-radius:12px; background:#f6faf7; transition:.15s ease; }
+    .drop-zone.dragover { background:#e6ebe8; border-color:#65846f; }
+    .drop-zone p { margin:0 0 15px; color:#4b5563; }
+    .load-footer { margin-top:28px; font-size:14px; }
+    .load-error { min-height:24px; color:#b91c1c; font-size:14px; }
+    .hidden { display:none !important; }
+    .hurdle-rule { margin:-4px 0 14px; font-size:14px; }
+    .cards { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .metric { padding:19px; border:1px solid #d1d5db; border-radius:9px; }
+    .metric-label { color:#4b5563; font-size:16px; }
+    .metric-value { margin:10px 0; color:#65846f; font-size:38px; line-height:1; font-weight:750; letter-spacing:-.05em; }
+    .badge { display:inline-block; margin-left:7px; padding:4px 8px; border-radius:999px; background:#e6ebe8; color:#365b40; font-size:12px; font-weight:700; letter-spacing:0; vertical-align:7px; }
+    .metric.danger .metric-value { color:#c62828; }
+    .metric.danger .badge { color:#991b1b; background:#fce8e8; }
+    .track { position:relative; height:8px; border-radius:99px; background:#f3f4f6; overflow:visible; }
+    .fill { height:100%; width:0; border-radius:99px; background:#65846f; transition:width .15s ease; }
+    .metric.danger .fill { background:#c62828; }
+    .pass-line { position:absolute; top:-4px; left:50%; height:16px; width:1px; background:#6b7280; }
+    .card-note { margin-top:8px; color:#6b7280; font-size:13px; }
+    .topics { border-top:1px solid #e5e7eb; margin-top:32px; padding-top:2px; }
+    .topics-subtitle { margin-top:-7px; color:#6b7280; }
+    .topic-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:16px; }
+    .topic-card { overflow:hidden; border:1px solid #d1d5db; border-radius:9px; }
+    .topic-title { padding:11px 14px; color:#365b40; background:#f3f4f6; font-weight:750; }
+    .topic-content { padding:15px 14px; }
+    .topic-label { color:#6b7280; font-size:13px; }
+    .topic-value { margin:4px 0 11px; color:#65846f; font-size:33px; font-weight:780; letter-spacing:-.04em; }
+    .topic-description { margin-top:10px; color:#4b5563; font-size:13px; }
+    .scenario-body { padding:14px 16px 6px; }
+    .scenario-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+    .hurdles-pending { margin-top:20px; }
+    .reset-button { border-color:#9ca3af; background:#fff; color:#365b40; font-size:14px; }
+    .reset-button:hover { background:#f3f4f6; }
+    .scenario-subtitle { color:#6b7280; }
+    .scenario-row { display:grid; grid-template-columns:220px 1fr 52px; gap:16px; align-items:center; margin:15px 0; }
+    input[type=range] { width:100%; accent-color:#65846f; }
+    output { text-align:right; font-weight:750; }
+    .marks { border:1px solid #d1d5db; border-radius:8px; overflow:hidden; margin-top:30px; }
+    .marks-title { padding:12px 14px; color:#65846f; background:#f3f4f6; font-weight:750; cursor:pointer; }
+    .marks-title::marker { color:#65846f; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; min-width:660px; border-collapse:collapse; font-size:14px; }
+    th { padding:10px 14px; background:#f9fafb; color:#4b5563; text-align:left; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+    td { padding:10px 14px; border-top:1px solid #e5e7eb; }
+    th:not(:first-child), td:not(:first-child) { text-align:right; }
+    tr.category td { padding:9px 14px; background:#e6ebe8; color:#365b40; text-align:left; font-size:12px; font-weight:750; letter-spacing:.04em; text-transform:uppercase; }
+    .points { font-weight:700; }
+    footer { margin-top:25px; color:#6b7280; font-size:13px; }
+    @media (max-width:700px) { main { padding:24px 16px 36px; } header { flex-direction:column; } .student-header { text-align:left; } .cards, .topic-grid { grid-template-columns:1fr; } .scenario-row { grid-template-columns:106px 1fr 48px; gap:10px; } .notice { flex-direction:column; align-items:flex-start; } }
+  </style>
+</head>
+<body>
+  <main>
+    <section id="loader" class="load-panel" aria-labelledby="load-title">
+      <h1 id="load-title">CST8371 — Your Standing</h1>
+      <p class="muted">Load the personal status file provided to you.</p>
+      <div id="drop-zone" class="drop-zone">
+        <p>Drop your <strong>.yaml</strong> file here, or choose it from your device.</p>
+        <label class="file-button" for="file-input">Choose my status file</label>
+        <input id="file-input" type="file" accept=".yaml,.yml,text/yaml,application/x-yaml">
+      </div>
+      <p id="load-error" class="load-error" role="alert"></p>
+      <p class="muted load-footer">CST8371 | Introduction to Enterprise Networking | C. Ayala</p>
+    </section>
+
+    <section id="standing" class="hidden" aria-live="polite">
+      <header>
+        <div><h1>CST8371 — Course Progress</h1><p id="as-of" class="muted"></p></div>
+        <div class="student-header"><div id="student-name"></div><div id="student-identity" class="muted"></div><div class="file-status"><span class="dot"></span><span id="file-name">Status file loaded</span></div></div>
+      </header>
+      <div class="notice"><span>Grades shown are those already released in Brightspace. This page is a planning aid, not an official grade.</span><button id="change-file" type="button">Load another file</button></div>
+
+      <section id="hurdles-section">
+      <h2>Three hurdles — you must clear all three</h2>
+      <p class="muted hurdle-rule">To pass you need at least 50% overall, 20 of 40 theory points, and 17.5 of 35 practical-skills points. Foundation Labs and Audits count toward your overall grade but not toward the theory or practical-skills hurdles.</p>
+      <div class="cards">
+        <article id="overall-card" class="metric"><div class="metric-label">Overall grade</div><div class="metric-value"><span>—</span><span class="badge">—</span></div><div class="track"><div class="fill"></div><i class="pass-line"></i></div><div class="card-note">—</div></article>
+        <article id="theory-card" class="metric"><div class="metric-label">Theory (topic evaluations, quizzes, final exam)</div><div class="metric-value"><span>—</span><span class="badge">—</span></div><div class="track"><div class="fill"></div><i class="pass-line"></i></div><div class="card-note">—</div></article>
+        <article id="sbas-card" class="metric"><div class="metric-label">Practical skills (Challenges + Final SBA)</div><div class="metric-value"><span>—</span><span class="badge">—</span></div><div class="track"><div class="fill"></div><i class="pass-line"></i></div><div class="card-note">—</div></article>
+      </div>
+      </section>
+      <p id="hurdles-pending" class="notice hurdles-pending hidden"></p>
+
+      <section id="topics-section" class="topics hidden"><h2>How did I do by topic?</h2><p class="topics-subtitle">Cumulative performance from Brightspace assessments connected to each topic.</p><div id="topic-grid" class="topic-grid"></div></section>
+      <details id="scenario-section" class="marks scenario hidden"><summary class="marks-title">What if…</summary><div class="scenario-body"><div class="scenario-heading"><p class="scenario-subtitle">Set estimates for unreleased work. The cards above show projected course points, not a percentage of work graded so far.</p><button id="reset-estimates" class="reset-button" type="button">Reset estimates</button></div><div id="scenario-controls"></div></div></details>
+      <details class="marks"><summary id="marks-title" class="marks-title">Released marks</summary><div class="table-wrap"><table><thead><tr><th>Assessment</th><th>Mark</th><th>Out of</th><th>Released</th></tr></thead><tbody id="marks-body"></tbody></table></div></details>
+      <footer>Something look wrong? Brightspace is the record of truth — contact your professor before relying on this page.</footer>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const $ = selector => document.querySelector(selector);
+      const loader = $('#loader');
+      const standing = $('#standing');
+      const input = $('#file-input');
+      const error = $('#load-error');
+      let studentData = null;
+
+      const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+      const number = value => Number.isFinite(Number(value)) ? Number(value) : null;
+      const points = value => Number(value).toFixed(1).replace(/\.0$/, '');
+
+      function normalise(data) {
+        if (!data || typeof data !== 'object') throw new Error('This is not a valid status file.');
+        if (data.students) throw new Error('This is the instructor’s full-class file. Load only your personal status file.');
+        if (data.format !== 'cst8371-student-status') throw new Error('This file is not a CST8371 personal status file.');
+        if (!data.standing || !data.hurdles || !data.course_points || !Array.isArray(data.assessments)) throw new Error('This status file is incomplete. Ask your professor for a new copy.');
+        return data;
+      }
+
+      function setCard(id, model) {
+        const card = $(`#${id}-card`);
+        const earned = number(model.earned) ?? 0;
+        const maximum = number(model.max) ?? 100;
+        const passLine = number(model.pass_line) ?? maximum / 2;
+        const safe = Math.max(0, Math.min(100, earned / maximum * 100));
+        const pass = earned >= passLine;
+        card.classList.toggle('danger', !pass);
+        card.querySelector('.metric-value > span:first-child').textContent = `${points(earned)} / ${points(maximum)}`;
+        card.querySelector('.badge').textContent = pass ? 'Clears hurdle' : 'Below hurdle';
+        card.querySelector('.fill').style.width = `${safe}%`;
+        card.querySelector('.card-note').textContent = `pass line ${points(passLine)} / ${points(maximum)}`;
+      }
+
+      function calculatedHurdles() {
+        const totals = Object.fromEntries(Object.entries(studentData.course_points).map(([name, model]) => [name, {...model, earned:number(model.earned) ?? 0}]));
+        for (const [index, item] of (studentData.scenario?.assessments || []).entries()) {
+          const estimate = number($(`#scenario-${index}`)?.value) ?? number(item.default_pct) ?? 0;
+          for (const [key, contribution] of Object.entries(item.contributions || {})) {
+            if (totals[key]) totals[key].earned += estimate / 100 * (number(contribution) ?? 0);
+          }
+        }
+        return totals;
+      }
+
+      function updateCards() {
+        const values = calculatedHurdles();
+        setCard('overall', values.overall);
+        setCard('theory', values.theory);
+        setCard('sbas', values.sbas);
+        document.querySelectorAll('#scenario-controls input').forEach(control => control.nextElementSibling.value = `${control.value}%`);
+      }
+
+      function renderScenario() {
+        const items = studentData.scenario?.assessments || [];
+        if (!items.length) return;
+        $('#scenario-section').classList.remove('hidden');
+        $('#scenario-controls').innerHTML = items.map((item, index) => {
+          const id = `scenario-${index}`;
+          const initial = number(item.default_pct) ?? 0;
+          return `<div class="scenario-row"><label for="${id}">${escapeHtml(item.label)}</label><input id="${id}" type="range" min="0" max="100" value="${initial}"><output for="${id}">${initial}%</output></div>`;
+        }).join('');
+        document.querySelectorAll('#scenario-controls input').forEach(control => control.addEventListener('input', updateCards));
+        $('#reset-estimates').addEventListener('click', () => {
+          items.forEach((item, index) => { $(`#scenario-${index}`).value = number(item.default_pct) ?? 0; });
+          updateCards();
+        });
+      }
+
+      function renderTopics() {
+        const topics = studentData.topic_performance || [];
+        if (!topics.length) return;
+        $('#topics-section').classList.remove('hidden');
+        $('#topic-grid').innerHTML = topics.map(topic => {
+          const value = Math.max(0, Math.min(100, number(topic.pct) ?? 0));
+          return `<article class="topic-card"><div class="topic-title">${escapeHtml(topic.label)}</div><div class="topic-content"><div class="topic-label">Cumulative topic grade</div><div class="topic-value">${value.toFixed(1)}%</div><div class="track"><div class="fill" style="width:${value}%"></div></div><div class="topic-description">${escapeHtml(topic.description || '')}</div></div></article>`;
+        }).join('');
+      }
+
+      function renderMarks() {
+        const released = studentData.assessments.filter(item => item.released && number(item.score) !== null);
+        $('#marks-title').textContent = `Released marks — ${released.length} assessment${released.length === 1 ? '' : 's'}`;
+        const categoryNames = { 'Practical Assessments': 'Challenges & Final SBA', 'In-Class Exams': 'Topic Evaluations & Final Exam', Quiz: 'Online Quizzes', Labs: 'Foundation Labs', Audits: 'Audits' };
+        const categoryOrder = ['Practical Assessments', 'In-Class Exams', 'Quiz', 'Labs', 'Audits'];
+        const categories = new Map();
+        released.forEach(item => { const name = item.category || 'Other'; if (!categories.has(name)) categories.set(name, []); categories.get(name).push(item); });
+        const ordered = [...categories].sort(([left], [right]) => (categoryOrder.indexOf(left) < 0 ? 99 : categoryOrder.indexOf(left)) - (categoryOrder.indexOf(right) < 0 ? 99 : categoryOrder.indexOf(right)) || left.localeCompare(right));
+        $('#marks-body').innerHTML = ordered.map(([category, items]) => `<tr class="category"><td colspan="4">${escapeHtml(categoryNames[category] || category)}</td></tr>${items.map(item => `<tr><td>${escapeHtml(item.label)}</td><td class="points">${escapeHtml(item.score)}</td><td>${escapeHtml(item.max)}</td><td>Yes</td></tr>`).join('')}`).join('');
+      }
+
+      function render(data, filename) {
+        studentData = normalise(data);
+        $('#student-name').textContent = studentData.student?.name || studentData.student?.username || 'Student';
+        $('#student-identity').textContent = [studentData.student?.username, studentData.student?.student_number ? `Student no. ${typeof studentData.student.student_number === 'number' ? String(studentData.student.student_number).padStart(9, '0') : studentData.student.student_number}` : null].filter(Boolean).join(' · ');
+        $('#as-of').textContent = [studentData.student?.section ? `Section ${studentData.student.section}` : null, studentData.generated ? `as of ${new Date(studentData.generated).toLocaleDateString(undefined, {year:'numeric',month:'long',day:'numeric'})}` : null].filter(Boolean).join(' · ');
+        $('#file-name').textContent = filename;
+        const coverage = studentData.coverage;
+        const needed = number(coverage?.show_hurdles_from_pct) ?? 40;
+        const showHurdles = !coverage || (number(coverage.assessed_pct) ?? 0) >= needed;
+        $('#hurdles-section').classList.toggle('hidden', !showHurdles);
+        $('#hurdles-pending').classList.toggle('hidden', showHurdles);
+        if (!showHurdles) $('#hurdles-pending').textContent = `Your pass hurdles appear here once at least ${needed}% of the course grade has been assessed. Your released marks are listed below.`;
+        renderTopics();
+        if (showHurdles) renderScenario(); else $('#scenario-section').classList.add('hidden');
+        renderMarks();
+        updateCards();
+        loader.classList.add('hidden');
+        standing.classList.remove('hidden');
+      }
+
+      function readFile(file) {
+        if (!file) return;
+        error.textContent = '';
+        if (!window.jsyaml) { error.textContent = 'The YAML reader could not load. Connect to the internet and reload this page.'; return; }
+        const reader = new FileReader();
+        reader.onerror = () => { error.textContent = 'The file could not be read.'; };
+        reader.onload = () => { try { render(window.jsyaml.load(reader.result), file.name); } catch (err) { error.textContent = err.message || 'The YAML file could not be read.'; } };
+        reader.readAsText(file);
+      }
+
+      input.addEventListener('change', () => readFile(input.files[0]));
+      $('#change-file').addEventListener('click', () => { input.value = ''; input.click(); });
+      const dropZone = $('#drop-zone');
+      ['dragenter','dragover'].forEach(event => dropZone.addEventListener(event, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
+      ['dragleave','drop'].forEach(event => dropZone.addEventListener(event, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
+      dropZone.addEventListener('drop', event => readFile(event.dataTransfer.files[0]));
+    })();
+  </script>
+</body>
+</html>

@@ -42,6 +42,16 @@ Renders a [GradeIt](https://github.com/ayalac1111/GradeIt) feedback YAML file �
 open feedback-viewer/feedback-view.html
 ```
 
+### [standing-viewer](standing-viewer/)
+
+Shows your personal course-standing file — the YAML file your instructor sends you — as a readable progress page with your released marks and where you stand against the course hurdles.
+
+**How it works**: `standing-view.html` is a self-contained page — no install, no server. Open it in a browser and drop in your personal status `.yaml` file; everything runs client-side and the file never leaves your computer.
+
+```bash
+open standing-viewer/standing-view.html
+```
+
 ## Getting the code
 
 ```bash
