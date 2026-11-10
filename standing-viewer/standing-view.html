@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CST8371 — Your Standing</title>
+  <title>26F-CST8371 — Your Standing</title>
   <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
   <style>
     :root { color-scheme: light; font-family: system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; color:#111827; background:#fff; }
@@ -55,6 +55,22 @@
     .topic-label { color:#6b7280; font-size:13px; }
     .topic-value { margin:4px 0 11px; color:#65846f; font-size:33px; font-weight:780; letter-spacing:-.04em; }
     .topic-description { margin-top:10px; color:#4b5563; font-size:13px; }
+    .fill.graded { background:#9fb5a5; }
+    .topic-track { position:relative; height:14px; border-radius:99px; background:#e5e7eb; overflow:hidden; }
+    .topic-track .layer { position:absolute; left:0; top:0; bottom:0; width:0; }
+    .topic-track .layer.graded { background:#9fb5a5; }
+    .topic-track .layer.earned.red { background:#c62828; }
+    .topic-track .layer.earned.yellow { background:#f59e0b; }
+    .topic-track .layer.earned.green { background:#365b40; }
+    .topic-track .layer.earned.neutral { background:#6b7280; }
+    .topic-value.red { color:#b91c1c; } .topic-value.yellow { color:#92400e; } .topic-value.green { color:#365b40; } .topic-value.neutral { color:#6b7280; }
+    .topic-early { font-size:13px; font-weight:500; letter-spacing:0; }
+    .graded-label { margin-top:8px; }
+    .topic-none { color:#6b7280; }
+    .bonus { border-top:1px solid #e5e7eb; margin-top:32px; padding-top:2px; }
+    .bonus .topics-subtitle { margin-top:-7px; }
+    .bonus-card .topic-title { color:#7a5b12; background:#fbf3de; }
+    .bonus-card .topic-value { color:#7a5b12; }
     .scenario-body { padding:14px 16px 6px; }
     .scenario-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; }
     .hurdles-pending { margin-top:20px; }
@@ -81,7 +97,7 @@
 <body>
   <main>
     <section id="loader" class="load-panel" aria-labelledby="load-title">
-      <h1 id="load-title">CST8371 — Your Standing</h1>
+      <h1 id="load-title">26F-CST8371 — Your Standing</h1>
       <p class="muted">Load the personal status file provided to you.</p>
       <div id="drop-zone" class="drop-zone">
         <p>Drop your <strong>.yaml</strong> file here, or choose it from your device.</p>
@@ -110,7 +126,8 @@
       </section>
       <p id="hurdles-pending" class="notice hurdles-pending hidden"></p>
 
-      <section id="topics-section" class="topics hidden"><h2>How did I do by topic?</h2><p class="topics-subtitle">Cumulative performance from Brightspace assessments connected to each topic.</p><div id="topic-grid" class="topic-grid"></div></section>
+      <section id="topics-section" class="topics hidden"><h2>How did I do by topic?</h2><p class="topics-subtitle">Cumulative grade on the assessments graded so far in each topic. The light green bar shows how much of the topic has been graded, and your marks are drawn inside it.</p><div id="topic-grid" class="topic-grid"></div></section>
+      <section id="bonus-section" class="bonus hidden"><h2>Bonus</h2><p class="topics-subtitle">Extra credit. It is added to your overall grade and does not count toward the theory or practical-skills hurdles.</p><div id="bonus-grid" class="topic-grid"></div></section>
       <details id="scenario-section" class="marks scenario hidden"><summary class="marks-title">What if…</summary><div class="scenario-body"><div class="scenario-heading"><p class="scenario-subtitle">Set estimates for unreleased work. The cards above show projected course points, not a percentage of work graded so far.</p><button id="reset-estimates" class="reset-button" type="button">Reset estimates</button></div><div id="scenario-controls"></div></div></details>
       <details class="marks"><summary id="marks-title" class="marks-title">Released marks</summary><div class="table-wrap"><table><thead><tr><th>Assessment</th><th>Mark</th><th>Out of</th><th>Released</th></tr></thead><tbody id="marks-body"></tbody></table></div></details>
       <footer>Something look wrong? Brightspace is the record of truth — contact your professor before relying on this page.</footer>
@@ -168,6 +185,8 @@
         setCard('overall', values.overall);
         setCard('theory', values.theory);
         setCard('sbas', values.sbas);
+        const bonus = bonusTotal();
+        if (bonus > 0) $('#overall-card .card-note').textContent += ` · includes +${fmt2(bonus)} bonus`;
         document.querySelectorAll('#scenario-controls input').forEach(control => control.nextElementSibling.value = `${control.value}%`);
       }
 
@@ -192,13 +211,36 @@
         if (!topics.length) return;
         $('#topics-section').classList.remove('hidden');
         $('#topic-grid').innerHTML = topics.map(topic => {
+          const hasGrade = number(topic.pct) !== null;
           const value = Math.max(0, Math.min(100, number(topic.pct) ?? 0));
-          return `<article class="topic-card"><div class="topic-title">${escapeHtml(topic.label)}</div><div class="topic-content"><div class="topic-label">Cumulative topic grade</div><div class="topic-value">${value.toFixed(1)}%</div><div class="track"><div class="fill" style="width:${value}%"></div></div><div class="topic-description">${escapeHtml(topic.description || '')}</div></div></article>`;
+          const graded = Math.max(0, Math.min(100, number(topic.graded_pct) ?? 0));
+          const early = graded < 25;
+          const tone = early ? 'neutral' : value < 50 ? 'red' : value < 70 ? 'yellow' : 'green';
+          const earnedWidth = value * graded / 100;
+          const gradedText = `${graded >= 10 ? Math.round(graded) : Math.round(graded * 10) / 10}%`;
+          const gradedHtml = number(topic.graded_pct) === null ? '' : `<div class="topic-label graded-label">Graded so far: ${points(number(topic.graded_points) ?? 0)} of ${points(number(topic.total_points) ?? 0)} course points (${gradedText})${early ? ' · too early to judge' : ''}</div>`;
+          const gradeHtml = hasGrade ? `<div class="topic-value ${tone}">${value.toFixed(1)}%${early ? ' <span class="topic-early">so far</span>' : ''}</div><div class="topic-track"><div class="layer graded" style="width:${graded}%"></div><div class="layer earned ${tone}" style="width:${earnedWidth}%"></div></div>` : `<div class="topic-value topic-none">—</div><div class="topic-description topic-none">Nothing in this topic has been graded yet.</div>`;
+          return `<article class="topic-card"><div class="topic-title">${escapeHtml(topic.label)}</div><div class="topic-content"><div class="topic-label">Cumulative topic grade</div>${gradeHtml}${gradedHtml}<div class="topic-description">${escapeHtml(topic.description || '')}</div></div></article>`;
+        }).join('');
+      }
+
+      const bonusItems = () => (studentData?.assessments || []).filter(item => item.category === 'Bonus' && number(item.score) !== null);
+      const fmt2 = value => (Math.round(value * 100) / 100).toString();
+      const bonusTotal = () => bonusItems().reduce((sum, item) => sum + (number(item.bonus_course_points) ?? 0), 0);
+
+      function renderBonus() {
+        const items = bonusItems();
+        $('#bonus-section').classList.toggle('hidden', !items.length);
+        if (!items.length) return;
+        $('#bonus-grid').innerHTML = items.map(item => {
+          const maxPoints = number(item.bonus_max_points) ?? 0;
+          const earned = number(item.bonus_course_points) ?? 0;
+          return `<article class="topic-card bonus-card"><div class="topic-title">${escapeHtml(item.label)}</div><div class="topic-content"><div class="topic-label">Your mark</div><div class="topic-value">${escapeHtml(item.score)} / ${escapeHtml(item.max)}</div><div class="topic-description">Adds ${fmt2(earned)} of up to ${points(maxPoints)} point${maxPoints === 1 ? '' : 's'} to your overall grade.</div></div></article>`;
         }).join('');
       }
 
       function renderMarks() {
-        const released = studentData.assessments.filter(item => item.released && number(item.score) !== null);
+        const released = studentData.assessments.filter(item => item.released && number(item.score) !== null && item.category !== 'Bonus');
         $('#marks-title').textContent = `Released marks — ${released.length} assessment${released.length === 1 ? '' : 's'}`;
         const categoryNames = { 'Practical Assessments': 'Challenges & Final SBA', 'In-Class Exams': 'Topic Evaluations & Final Exam', Quiz: 'Online Quizzes', Labs: 'Foundation Labs', Audits: 'Audits' };
         const categoryOrder = ['Practical Assessments', 'In-Class Exams', 'Quiz', 'Labs', 'Audits'];
@@ -221,6 +263,7 @@
         $('#hurdles-pending').classList.toggle('hidden', showHurdles);
         if (!showHurdles) $('#hurdles-pending').textContent = `Your pass hurdles appear here once at least ${needed}% of the course grade has been assessed. Your released marks are listed below.`;
         renderTopics();
+        renderBonus();
         if (showHurdles) renderScenario(); else $('#scenario-section').classList.add('hidden');
         renderMarks();
         updateCards();
